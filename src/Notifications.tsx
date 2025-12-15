@@ -24,40 +24,7 @@ class NotificationService {
     return NotificationService.instance;
   }
 
-  // Initialize notification system with SOUND
-  async initializeNotifications() {
-    try {
-      console.log('🔔 Setting up notification system WITH SOUND...');
-      
-      // Request permissions using modular API
-      const authStatus = await messaging().hasPermission();
-      if (!authStatus) {
-        const permission = await messaging().requestPermission();
-        if (!permission) {
-          console.log('❌ Notification permission not granted');
-          return false;
-        }
-      }
 
-      // Create notification channel WITH SOUND
-      await this.createNotificationChannel();
-      
-      // Get FCM token
-      await this.getFCMToken();
-      
-      // Setup all handlers
-      this.setupForegroundHandler();
-      this.setupBackgroundHandler();
-      this.setupTokenRefreshHandler();
-      
-      this.notificationInitialized = true;
-      console.log('✅ Notification system initialized WITH SOUND');
-      return true;
-    } catch (error) {
-      console.error('❌ Error in notification system initialization:', error);
-      return false;
-    }
-  }
 
   async createNotificationChannel() {
     if (Platform.OS === 'android') {
@@ -128,38 +95,198 @@ class NotificationService {
     }
   }
 
-  async setupBackgroundHandler() {
-    try {
-      console.log('📱 Setting up background handler WITH SOUND...');
+
+  async initializeNotifications() {
+  try {
+    console.log('🔔 Setting up notification system WITH SOUND...');
+    
+    // ✅ FIX: Use modular API
+    const messagingModule = messaging();
+    
+    // Request permissions using modular API
+    const authStatus = await messagingModule.hasPermission();
+    if (!authStatus) {
+      const permission = await messagingModule.requestPermission();
+      if (!permission) {
+        console.log('❌ Notification permission not granted');
+        return false;
+      }
+    }
+
+    // Create notification channel WITH SOUND
+    await this.createNotificationChannel();
+    
+    // Get FCM token using modular API
+    await this.getFCMToken();
+    
+    // Setup all handlers
+    this.setupForegroundHandler();
+    this.setupBackgroundHandler();
+    this.setupTokenRefreshHandler();
+    
+    this.notificationInitialized = true;
+    console.log('✅ Notification system initialized WITH SOUND');
+    return true;
+  } catch (error) {
+    console.error('❌ Error in notification system initialization:', error);
+    return false;
+  }
+}
+
+async getFCMToken(): Promise<string | null> {
+  try {
+    console.log('🔑 Getting FCM token...');
+    
+    // ✅ FIX: Use modular API
+    const messagingModule = messaging();
+    const token = await messagingModule.getToken();
+    
+    if (token) {
+      this.fcmToken = token;
+      console.log('✅ FCM Token obtained:', token.substring(0, 20) + '...');
       
-      // Use modular API for background handler
-      messaging().setBackgroundMessageHandler(async remoteMessage => {
-        console.log('📱 🟢 BACKGROUND FCM RECEIVED:', remoteMessage?.data);
+      await AsyncStorage.setItem('fcmToken', token);
+      return token;
+    } else {
+      console.log('❌ No FCM token received');
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error getting FCM token:', error);
+    return null;
+  }
+}
+
+setupForegroundHandler() {
+  try {
+    console.log('📱 Setting up foreground message handler WITH SOUND...');
+    
+    // ✅ FIX: Use modular API
+    const messagingModule = messaging();
+    
+    return messagingModule.onMessage(async remoteMessage => {
+      console.log('📱 🔵 FOREGROUND FCM message received:', remoteMessage);
+      
+      // Parse the notification data
+      const data = remoteMessage.data || {};
+      const notification = remoteMessage.notification || {};
+      
+      console.log('📱 Notification data:', data);
+      console.log('📱 Notification body:', notification);
+      
+      // Handle ride requests
+      if (data.type === 'ride_request') {
+        console.log('🎯 RIDE REQUEST DETECTED in foreground');
         
-        // Extract data
-        const data = remoteMessage?.data || {};
-        const notification = remoteMessage?.notification || {};
+        // Combine all data
+        const rideData = {
+          ...data,
+          notificationTitle: notification.title,
+          notificationBody: notification.body,
+          timestamp: new Date().toISOString()
+        };
         
-        // Show notification with SOUND in background
+        console.log('📢 Emitting rideRequest event with combined data:', rideData);
+        
+        // Show local notification immediately
         await this.showLocalNotification({
-          title: notification.title || data.title || '🚖 New Ride Request',
-          body: notification.body || data.body || 'Tap to view ride details',
+          title: notification.title || '🚖 New Ride Request',
+          body: notification.body || 'Tap to view ride details',
           data: data
         });
-
-        // Store for when app opens
-        if (data.type === 'ride_request') {
-          await AsyncStorage.setItem('pendingRideRequest', JSON.stringify(data));
-          console.log('💾 Saved pending ride request for app open');
-        }
         
-        return Promise.resolve();
+        // Emit event for immediate UI update
+        setTimeout(() => {
+          this.emit('rideRequest', rideData);
+          console.log('✅ rideRequest event emitted for immediate UI update');
+        }, 100);
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error setting up foreground handler:', error);
+  }
+}
+
+async setupBackgroundHandler() {
+  try {
+    console.log('📱 Setting up background handler WITH SOUND...');
+    
+    // ✅ FIX: Use modular API
+    const messagingModule = messaging();
+    
+    messagingModule.setBackgroundMessageHandler(async remoteMessage => {
+      console.log('📱 🟢 BACKGROUND FCM RECEIVED:', remoteMessage?.data);
+      
+      // Extract data
+      const data = remoteMessage?.data || {};
+      const notification = remoteMessage?.notification || {};
+      
+      // Show notification with SOUND in background
+      await this.showLocalNotification({
+        title: notification.title || data.title || '🚖 New Ride Request',
+        body: notification.body || data.body || 'Tap to view ride details',
+        data: data
       });
 
-    } catch (error) {
-      console.error('❌ Background handler setup failed:', error);
-    }
+      // Store for when app opens
+      if (data.type === 'ride_request') {
+        await AsyncStorage.setItem('pendingRideRequest', JSON.stringify(data));
+        console.log('💾 Saved pending ride request for app open');
+      }
+      
+      return Promise.resolve();
+    });
+
+  } catch (error) {
+    console.error('❌ Background handler setup failed:', error);
   }
+}
+
+setupTokenRefreshHandler() {
+  try {
+    // ✅ FIX: Use modular API
+    const messagingModule = messaging();
+    
+    messagingModule.onTokenRefresh(async (newToken) => {
+      console.log('🔄 FCM token refreshed:', newToken.substring(0, 20) + '...');
+      
+      // Update token in backend
+      try {
+        const authToken = await AsyncStorage.getItem("authToken");
+        const driverId = await AsyncStorage.getItem("driverId");
+        
+        if (authToken && driverId) {
+          const response = await fetch(`${API_BASE}/api/drivers/update-fcm-token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({
+              driverId: driverId,
+              fcmToken: newToken,
+              platform: Platform.OS
+            }),
+          });
+          
+          if (response.ok) {
+            console.log('✅ FCM token updated on server');
+          } else {
+            console.log('❌ Failed to update FCM token:', response.status);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error updating FCM token:', error);
+      }
+      
+      // Emit event for app to handle
+      this.emit('tokenRefresh', newToken);
+    });
+  } catch (error) {
+    console.error('❌ Error setting up token refresh handler:', error);
+  }
+}
 
 
   // In Notifications.tsx, update the showLocalNotification method:
@@ -211,27 +338,6 @@ async showLocalNotification(notification: {
 }
 
 
-  async getFCMToken(): Promise<string | null> {
-    try {
-      console.log('🔑 Getting FCM token...');
-      
-      const token = await messaging().getToken();
-      
-      if (token) {
-        this.fcmToken = token;
-        console.log('✅ FCM Token obtained:', token.substring(0, 20) + '...');
-        
-        await AsyncStorage.setItem('fcmToken', token);
-        return token;
-      } else {
-        console.log('❌ No FCM token received');
-        return null;
-      }
-    } catch (error) {
-      console.error('❌ Error getting FCM token:', error);
-      return null;
-    }
-  }
 
   setupTokenRefreshHandler() {
     try {

@@ -1,15 +1,11 @@
-// Use NGROK URL for LOCALHOST MODE
-const NGROK_URL = "https://701dcc86fbd5.ngrok-free.app";
+const NGROK_URL = "https://eb4a6949d46b.ngrok-free.app";
 
-// Enable localhost mode
-const useLocalhost = false;
+const useLocalhost = true;
 
-// Backend URL
 export const API_BASE = useLocalhost
-  ? NGROK_URL
+  ? `${NGROK_URL}/api`
   : "https://ba-lhhs.onrender.com/api";
 
-// Socket URL
 export const SOCKET_URL = useLocalhost
   ? NGROK_URL
   : "https://ba-lhhs.onrender.com";

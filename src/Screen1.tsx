@@ -1954,6 +1954,8 @@ const confirmOTP = async () => {
 
 
 
+
+// In DriverScreen.js - Update completeRide function
 const completeRide = async () => {
   if (!ride || !location || !otpVerificationLocation) {
     Alert.alert("Error", "Missing required data to complete ride");
@@ -1966,31 +1968,51 @@ const completeRide = async () => {
     // Calculate actual distance from OTP verification to current location
     const distance = haversine(otpVerificationLocation, location) / 1000;
     
-    // Get vehicle type-specific rate from admin
-    const farePerKm = ride.fare || (dynamicPrices && dynamicPrices[ride.vehicleType || 'bike']) || 15;
+    // Get vehicle type-specific rate
+    const farePerKm = ride.fare || 15; // Default or use admin price
     
-    // Calculate final fare: distance × rate
+    // Calculate final fare
     const finalFare = Math.max(50, Math.round(distance * farePerKm));
     
-    console.log(`💰 FARE CALCULATION:`);
-    console.log(`   Distance: ${distance.toFixed(2)} km`);
-    console.log(`   Rate: ₹${farePerKm}/km`);
-    console.log(`   Final Fare: ₹${finalFare}`);
+    console.log(`💰 FARE CALCULATION: ${distance.toFixed(2)}km × ₹${farePerKm}/km = ₹${finalFare}`);
     
-    // Send ride completion to server with ACTUAL locations
-    if (socket && ride.rideId && driverId && otpVerificationLocation) {
-      socket.emit("rideCompleted", {
+    // CRITICAL: Send to backend API endpoint (more reliable than socket)
+    const authToken = await AsyncStorage.getItem("authToken");
+    const backendUrl = API_BASE; // Your backend URL
+    
+    const response = await fetch(`${backendUrl}/api/rides/complete-ride`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
         rideId: ride.rideId,
         driverId: driverId,
-        userId: userData?.userId,
         distance: parseFloat(distance.toFixed(2)),
-        fare: finalFare,
-        actualPickup: otpVerificationLocation, // OTP verified location
-        actualDrop: location, // Current location at completion
+        charge: finalFare,
+        actualPickup: otpVerificationLocation,
+        actualDrop: location,
         timestamp: new Date().toISOString()
-      });
-      
-      console.log(`📤 Sent ride completion with actual locations`);
+      })
+    });
+    
+    if (response.ok) {
+      console.log("✅ Ride completion sent to backend successfully");
+    } else {
+      console.error("❌ Backend completion failed, using socket fallback");
+      // Fallback to socket
+      if (socket) {
+        socket.emit("rideCompleted", {
+          rideId: ride.rideId,
+          driverId: driverId,
+          distance: parseFloat(distance.toFixed(2)),
+          charge: finalFare,
+          travelTime: `${Math.round(distance * 10)} mins`,
+          vehicleType: ride.vehicleType || 'bike',
+          timestamp: new Date().toISOString()
+        });
+      }
     }
     
     // Show bill modal to driver
@@ -1998,8 +2020,8 @@ const completeRide = async () => {
       distance: `${distance.toFixed(2)} km`,
       travelTime: `${Math.round(distance * 10)} mins`,
       charge: finalFare,
-      userName: userData?.name || 'Customer',
-      userMobile: 'NA',
+      userName: ride.userName || 'Customer',
+      userMobile: ride.userMobile || 'N/A',
       driverName: driverName,
       vehicleType: ride.vehicleType || 'bike',
       baseFare: 0,
@@ -2014,6 +2036,7 @@ const completeRide = async () => {
     Alert.alert("Error", "Failed to complete ride. Please try again.");
   }
 };
+
 
 
 
