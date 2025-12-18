@@ -1,4 +1,4 @@
-const NGROK_URL = "https://eb4a6949d46b.ngrok-free.app";
+const NGROK_URL = "https://5207a262405d.ngrok-free.app";
 
 const useLocalhost = true;
 
